@@ -1,6 +1,6 @@
 /**
- * Sonora Music Server v4.0.0
- * Dual-mode backend server (Local PC & Render.com compatible)
+ * Sonora Music Server v7.12.1
+ * Triple-mode backend server (Local PC, Render.com & Northflank compatible)
  * Express.js + SQLite (better-sqlite3) + Multer + Audio Streaming (HTTP 206)
  */
 
@@ -18,17 +18,21 @@ const isRender = SERVER_MODE === 'render';
 const isNorthflank = SERVER_MODE === 'northflank';
 
 // Paths
-const publicDir = path.resolve(__dirname, '../public');
-const musicDir = path.resolve(__dirname, '../music');
-const dbPath = path.resolve(__dirname, 'sonora.db');
+const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
+const publicDir = process.env.PUBLIC_DIR ? path.resolve(process.env.PUBLIC_DIR) : (fs.existsSync(path.resolve(__dirname, 'public')) ? path.resolve(__dirname, 'public') : path.resolve(__dirname, '../public'));
+const musicDir = process.env.MUSIC_DIR ? path.resolve(process.env.MUSIC_DIR) : path.resolve(dataDir, 'music');
+const dbPath = process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : path.resolve(dataDir, 'sonora.db');
 
 // Ensure directories exist
 try {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
   if (!fs.existsSync(musicDir)) {
     fs.mkdirSync(musicDir, { recursive: true });
   }
 } catch (err) {
-  console.error('[Startup] Failed to create music directory:', err);
+  console.error('[Startup] Failed to create directories:', err);
 }
 
 // ---------------------------------------------------------------------------
@@ -621,10 +625,9 @@ app.get('/api/health', (req, res) => {
       status: 'ok',
       server: isNorthflank ? 'northflank' : (isRender ? 'render' : 'local'),
       uptime: Math.floor(process.uptime()),
-      version: '7.12.0',
+      version: '7.12.1',
       mode: SERVER_MODE,
-      apiToken: process.env.API_TOKEN || 'nf-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1dWlkIjoiYjk5YzY1ZWYtYjQwYy00NTNmLWE2ODUtYzlkN2QyY2QzMDg5IiwiZW50aXR5SWQiOiI2YWUyM2YxOTMwNmFiOTYxN2Q3N2IwNmMiLCJlbnRpdHlUeXBlIjoidGVhbSIsInRva2VuSWQiOiI2YWUyNDUxMjA5NDBlOTA3ZDc1MGI0OTEiLCJ0b2tlbkludGVybmFsSWQiOiJzb25vcmEtZGVwbG95Iiwicm9sZUlkIjoiNmFlMjNmMTkzMDZhYjk2MTdkNzdiMDZkIiwicm9sZUVudGl0eUlkIjoiNmFlMjNmMTkzMDZhYjk2MTdkNzbiMDZjIiwicm9sZUVudGl0eVR5cGUiOiJ0ZWFtIiwicm9sZUludGVybmFsSWQiOiJvd25lciIsInR5cGUiOiJyYmFjIiwiaWF0IjoxNzkzMjEzNzE0fQ.BC3qvwrrLT3eySEIzCT81KuOwQIeoKU47M1nKHGrxmc',
-      connected: isNorthflank || isRender || SERVER_MODE === 'local'
+      connected: true
     });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
@@ -2074,7 +2077,7 @@ process.on('unhandledRejection', (reason, promise) => {
 // ---------------------------------------------------------------------------
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('----------------------------------------------------');
-  console.log('🎵 Sonora Music Server v7.12.0');
+  console.log('🎵 Sonora Music Server v7.12.1');
   console.log(`📡 Mode: ${isNorthflank ? 'Northflank' : (isRender ? 'Render' : 'Local')}`);
   console.log(`🌐 Port: ${PORT}`);
   console.log(`📁 Music directory: ${musicDir}`);

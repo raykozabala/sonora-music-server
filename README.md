@@ -147,23 +147,17 @@ services:
       - key: SERVER_MODE
         value: northflank
       - key: SERVER_URL
-        value: https://api.northflank.com
-      - key: NORTHFLANK_URL
-        value: https://api.northflank.com
-      - key: API_TOKEN
-        value: nf-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1dWlkIjoiYjk5YzY1ZWYtYjQwYy00NTNmLWE2ODUtYzlkN2QyY2QzMDg5IiwiZW50aXR5SWQiOiI2YWUyM2YxOTMwNmFiOTYxN2Q3N2IwNmMiLCJlbnRpdHlUeXBlIjoidGVhbSIsInRva2VuSWQiOiI2YWUyNDUxMjA5NDBlOTA3ZDc1MGI0OTEiLCJ0b2tlbkludGVybmFsSWQiOiJzb25vcmEtZGVwbG95Iiwicm9sZUlkIjoiNmFlMjNmMTkzMDZhYjk2MTdkNzbiMDZkIiwicm9sZUVudGl0eUlkIjoiNmFlMjNmMTkzMDZhYjk2MTdkNzbiMDZjIiwicm9sZUVudGl0eVR5cGUiOiJ0ZWFtIiwicm9sZUludGVybmFsSWQiOiJvd25lciIsInR5cGUiOiJyYmFjIiwiaWF0IjoxNzkzMjEzNzE0fQ.BC3qvwrrLT3eySEIzCT81KuOwQIeoKU47M1nKHGrxmc
+        value: https://tu-app.northflank.app
 ```
 
 ### Variables de Entorno para Northflank
 
 - `SERVER_MODE` = `northflank`
 - `SERVER_URL` = URL de tu servicio en Northflank
-- `NORTHFLANK_URL` = `https://api.northflank.com`
-- `API_TOKEN` = Token JWT para autenticación con Northflank
 
 ### Verificar en Northflank
 
-Visita: `https://tu-app.onnorthflank.com/api/health`
+Visita: `https://tu-app.northflank.app/api/health`
 
 La respuesta incluirá:
 ```json
@@ -171,10 +165,9 @@ La respuesta incluirá:
   "status": "ok",
   "server": "northflank",
   "mode": "northflank",
-  "apiToken": "nf-...",
   "connected": true,
   "uptime": 120,
-  "version": "7.12.0"
+  "version": "7.12.1"
 }
 ```
 
