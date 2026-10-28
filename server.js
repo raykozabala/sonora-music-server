@@ -13,8 +13,9 @@ const { spawn, execSync } = require('child_process');
 
 // Determine Server Mode & Environment
 const PORT = process.env.PORT || 3000;
-const SERVER_MODE = (process.env.SERVER_MODE || (process.env.RENDER ? 'render' : 'local')).toLowerCase();
+const SERVER_MODE = (process.env.SERVER_MODE || (process.env.RENDER ? 'render' : (process.env.NORTHFLANK ? 'northflank' : 'local'))).toLowerCase();
 const isRender = SERVER_MODE === 'render';
+const isNorthflank = SERVER_MODE === 'northflank';
 
 // Paths
 const publicDir = path.resolve(__dirname, '../public');
@@ -618,9 +619,12 @@ app.get('/api/health', (req, res) => {
   try {
     res.json({
       status: 'ok',
-      server: isRender ? 'render' : 'local',
+      server: isNorthflank ? 'northflank' : (isRender ? 'render' : 'local'),
       uptime: Math.floor(process.uptime()),
-      version: '4.0.0'
+      version: '7.12.0',
+      mode: SERVER_MODE,
+      apiToken: process.env.API_TOKEN || 'nf-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1dWlkIjoiYjk5YzY1ZWYtYjQwYy00NTNmLWE2ODUtYzlkN2QyY2QzMDg5IiwiZW50aXR5SWQiOiI2YWUyM2YxOTMwNmFiOTYxN2Q3N2IwNmMiLCJlbnRpdHlUeXBlIjoidGVhbSIsInRva2VuSWQiOiI2YWUyNDUxMjA5NDBlOTA3ZDc1MGI0OTEiLCJ0b2tlbkludGVybmFsSWQiOiJzb25vcmEtZGVwbG95Iiwicm9sZUlkIjoiNmFlMjNmMTkzMDZhYjk2MTdkNzdiMDZkIiwicm9sZUVudGl0eUlkIjoiNmFlMjNmMTkzMDZhYjk2MTdkNzbiMDZjIiwicm9sZUVudGl0eVR5cGUiOiJ0ZWFtIiwicm9sZUludGVybmFsSWQiOiJvd25lciIsInR5cGUiOiJyYmFjIiwiaWF0IjoxNzkzMjEzNzE0fQ.BC3qvwrrLT3eySEIzCT81KuOwQIeoKU47M1nKHGrxmc',
+      connected: isNorthflank || isRender || SERVER_MODE === 'local'
     });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
@@ -2070,8 +2074,8 @@ process.on('unhandledRejection', (reason, promise) => {
 // ---------------------------------------------------------------------------
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('----------------------------------------------------');
-  console.log('🎵 Sonora Music Server v4.0.0');
-  console.log(`📡 Mode: ${isRender ? 'Render' : 'Local'}`);
+  console.log('🎵 Sonora Music Server v7.12.0');
+  console.log(`📡 Mode: ${isNorthflank ? 'Northflank' : (isRender ? 'Render' : 'Local')}`);
   console.log(`🌐 Port: ${PORT}`);
   console.log(`📁 Music directory: ${musicDir}`);
   console.log(`💾 Database: ${dbPath}`);

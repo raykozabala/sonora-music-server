@@ -1,6 +1,6 @@
 # 🎵 Sonora Music Server v7.5
 
-Servidor backend dual-mode para Sonora Music App. Funciona tanto en tu **computadora local (PC/Mac)** como en **Render.com**. Permite streaming de audio, búsqueda en YouTube/SoundCloud, y descarga/conversión de YouTube a MP3.
+Servidor backend **triple-mode** para Sonora Music App. Funciona en tu **computadora local (PC/Mac)**, **Render.com** y **Northflank**. Permite streaming de audio, búsqueda en YouTube/SoundCloud, y descarga/conversión de YouTube a MP3.
 
 ---
 
@@ -18,6 +18,7 @@ sonora-music/
 │   ├── musica/                # Carpeta donde se guardan los MP3 descargados (se crea automáticamente)
 │   └── sonora.db              # Base de datos SQLite
 ├── render.yaml                # Configuración de despliegue en Render
+├── northflank.yaml            # Configuración de despliegue en Northflank
 └── android-build/             # Código de la app móvil (APK)
 ```
 
@@ -121,11 +122,69 @@ Visita: `https://tu-app.onrender.com/api/health`
 
 ---
 
+## ☁️ Opción 3: Desplegar en Northflank
+
+Northflank permite desplegar el servidor con mayor control y escalabilidad.
+
+### Configuración con Token API
+
+El token API proporcionado conecta todo el servidor con Northflank de forma segura. El token JWT contiene los datos del usuario, equipo y rol necesarios para la autenticación.
+
+### Configuración
+
+Crea un archivo `northflank.yaml` en la raíz del proyecto:
+
+```yaml
+services:
+  - type: web
+    name: sonora-music-server
+    env: docker
+    dockerfile: ./Dockerfile
+    rootDir: ./server
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: SERVER_MODE
+        value: northflank
+      - key: SERVER_URL
+        value: https://api.northflank.com
+      - key: NORTHFLANK_URL
+        value: https://api.northflank.com
+      - key: API_TOKEN
+        value: nf-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1dWlkIjoiYjk5YzY1ZWYtYjQwYy00NTNmLWE2ODUtYzlkN2QyY2QzMDg5IiwiZW50aXR5SWQiOiI2YWUyM2YxOTMwNmFiOTYxN2Q3N2IwNmMiLCJlbnRpdHlUeXBlIjoidGVhbSIsInRva2VuSWQiOiI2YWUyNDUxMjA5NDBlOTA3ZDc1MGI0OTEiLCJ0b2tlbkludGVybmFsSWQiOiJzb25vcmEtZGVwbG95Iiwicm9sZUlkIjoiNmFlMjNmMTkzMDZhYjk2MTdkNzbiMDZkIiwicm9sZUVudGl0eUlkIjoiNmFlMjNmMTkzMDZhYjk2MTdkNzbiMDZjIiwicm9sZUVudGl0eVR5cGUiOiJ0ZWFtIiwicm9sZUludGVybmFsSWQiOiJvd25lciIsInR5cGUiOiJyYmFjIiwiaWF0IjoxNzkzMjEzNzE0fQ.BC3qvwrrLT3eySEIzCT81KuOwQIeoKU47M1nKHGrxmc
+```
+
+### Variables de Entorno para Northflank
+
+- `SERVER_MODE` = `northflank`
+- `SERVER_URL` = URL de tu servicio en Northflank
+- `NORTHFLANK_URL` = `https://api.northflank.com`
+- `API_TOKEN` = Token JWT para autenticación con Northflank
+
+### Verificar en Northflank
+
+Visita: `https://tu-app.onnorthflank.com/api/health`
+
+La respuesta incluirá:
+```json
+{
+  "status": "ok",
+  "server": "northflank",
+  "mode": "northflank",
+  "apiToken": "nf-...",
+  "connected": true,
+  "uptime": 120,
+  "version": "7.12.0"
+}
+```
+
+---
+
 ## 📱 Funcionalidades del Servidor
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
-| `/api/health` | GET | Estado del servidor (local/render) |
+| `/api/health` | GET | Estado del servidor (local/render/northflank) |
 | `/api/tracks` | GET | Lista todas las canciones |
 | `/api/tracks/search?q=` | GET | Buscar canciones por título/artista |
 | `/api/tracks/:id` | GET | Obtener canción por ID |
