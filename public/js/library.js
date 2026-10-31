@@ -26,6 +26,18 @@
       .replace(/'/g, '&#039;');
   }
 
+  // Modo Dispositivo = sin servidor activo. La biblioteca local sigue viva.
+  function isDeviceMode() {
+    try {
+      if (Sonora.API && typeof Sonora.API.getMode === 'function') {
+        const mode = Sonora.API.getMode();
+        if (mode === 'device' || mode === 'off') return true;
+        if (mode === 'local' || mode === 'render' || mode === 'northflank') return false;
+      }
+    } catch (e) {}
+    return !(Sonora.API && typeof Sonora.API.getActiveUrl === 'function' ? Sonora.API.getActiveUrl() : '');
+  }
+
   /**
    * Pide una foto al usuario y la devuelve reducida como data URL JPEG.
    * Se usa para poner carátula manual a las canciones (sobre todo a las del
@@ -237,7 +249,7 @@
           <div class="empty-icon">🎵</div>
           <h3>Tu biblioteca está vacía</h3>
           <p>Busca tus canciones favoritas en YouTube o SoundCloud para comenzar a escuchar y descargar.</p>
-          <button type="button" class="btn btn--primary" data-action="go-search" style="margin-top:16px; background:var(--color-primary, #FF4757); color:var(--color-text-primary); border:none; border-radius:20px; padding:10px 22px; font-weight:700; cursor:pointer;">
+          <button type="button" class="btn btn--primary" data-action="go-search" style="margin-top:16px; background:var(--color-primary, #FF4757); color:var(--color-on-primary, #fff); border:none; border-radius:20px; padding:10px 22px; font-weight:700; cursor:pointer;">
             🔍 Buscar música para comenzar
           </button>
         </div>
@@ -723,7 +735,7 @@
               🔄 Escanear de nuevo
             </button>
             <button type="button" class="btn" data-action="request-storage"
-                    style="background:var(--color-surface-elevated); color:var(--color-text-primary); border:1px solid rgba(255,255,255,0.15); border-radius:20px; padding:10px 22px; font-weight:700; cursor:pointer;">
+                    style="background:var(--color-surface-elevated); color:var(--color-text-primary); border:1px solid var(--color-divider); border-radius:20px; padding:10px 22px; font-weight:700; cursor:pointer;">
               🔓 Permisos
             </button>
           </div>
@@ -742,15 +754,15 @@
         </button>
         <button type="button" class="btn" data-action="toggle-device-lock"
                 title="${deviceLockedInPlaylists ? 'Las canciones del teléfono están bloqueadas en las playlists' : 'Bloquear las canciones del teléfono en las playlists'}"
-                style="background:${deviceLockedInPlaylists ? 'var(--color-surface-elevated)' : 'rgba(255,255,255,0.06)'}; color:var(--color-text-primary); border:1px solid ${deviceLockedInPlaylists ? 'var(--color-primary, #FF4757)' : 'rgba(255,255,255,0.15)'}; border-radius:20px; padding:8px 14px; font-weight:700; cursor:pointer;">
+                style="background:${deviceLockedInPlaylists ? 'var(--color-surface-elevated)' : 'var(--color-card-bg)'}; color:var(--color-text-primary); border:1px solid ${deviceLockedInPlaylists ? 'var(--color-primary, #FF4757)' : 'var(--color-divider)'}; border-radius:20px; padding:8px 14px; font-weight:700; cursor:pointer;">
           ${deviceLockedInPlaylists ? '🔒 No en playlists' : '🔓 Sí en playlists'}
         </button>
         <button type="button" class="btn" data-action="scan-device" title="Escanear de nuevo"
-                style="background:var(--color-surface-elevated); color:var(--color-text-primary); border:1px solid rgba(255,255,255,0.15); border-radius:20px; padding:8px 14px; font-weight:700; cursor:pointer;">
+                style="background:var(--color-surface-elevated); color:var(--color-text-primary); border:1px solid var(--color-divider); border-radius:20px; padding:8px 14px; font-weight:700; cursor:pointer;">
           🔄
         </button>
         <button type="button" class="btn" data-action="request-storage" title="Permisos"
-                style="background:var(--color-surface-elevated); color:var(--color-text-primary); border:1px solid rgba(255,255,255,0.15); border-radius:20px; padding:8px 14px; font-weight:700; cursor:pointer;">
+                style="background:var(--color-surface-elevated); color:var(--color-text-primary); border:1px solid var(--color-divider); border-radius:20px; padding:8px 14px; font-weight:700; cursor:pointer;">
           🔓
         </button>
       </div>
@@ -766,13 +778,16 @@
     const dlTracks = tracks.filter(t => t && !!t.isDownloaded);
 
     if (dlTracks.length === 0) {
+      const device = isDeviceMode();
       return `
         <div class="lib-empty-state">
           <div class="empty-icon">💾</div>
           <h3>Sin descargas</h3>
-          <p>Descarga canciones desde el buscador para disfrutarlas sin conexión a internet o con Lark Player.</p>
-          <button type="button" class="btn btn--primary" data-action="go-search" style="margin-top:16px; background:var(--color-primary, #FF4757); color:var(--color-text-primary); border:none; border-radius:20px; padding:10px 22px; font-weight:700; cursor:pointer;">
-            🔍 Buscar canciones para descargar
+          <p>${device
+            ? 'Estás en Modo Dispositivo. Conecta un servidor para descargar canciones nuevas; las que ya tengas seguirán disponibles sin internet.'
+            : 'Descarga canciones desde el buscador para disfrutarlas sin conexión a internet o con Lark Player.'}</p>
+          <button type="button" class="btn btn--primary" data-action="${device ? 'go-settings' : 'go-search'}" style="margin-top:16px; background:var(--color-primary, #FF4757); color:var(--color-on-primary, #fff); border:none; border-radius:20px; padding:10px 22px; font-weight:700; cursor:pointer;">
+            ${device ? '⚙️ Elegir servidor' : '🔍 Buscar canciones para descargar'}
           </button>
         </div>
       `;
@@ -1940,6 +1955,15 @@
           if (goSearchBtn) {
             if (Sonora.Router && typeof Sonora.Router.navigate === 'function') {
               Sonora.Router.navigate('search');
+            }
+            return;
+          }
+
+          // 0a. Ir a Ajustes (Modo Dispositivo sin servidor)
+          const goSettingsBtn = target.closest('[data-action="go-settings"]');
+          if (goSettingsBtn) {
+            if (Sonora.Router && typeof Sonora.Router.navigate === 'function') {
+              Sonora.Router.navigate('settings');
             }
             return;
           }

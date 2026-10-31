@@ -7,8 +7,8 @@
 
   var Sonora = window.Sonora = window.Sonora || {};
 
-  var _mode = 'off'; // 'local' | 'render' | 'northflank' | 'off'
-  var _localUrl = 'http://MacBook-Air-de-Rayko.local:3000';
+  var _mode = 'device'; // 'device' | 'local' | 'render' | 'northflank' | 'off'
+  var _localUrl = '';
   var _renderUrl = 'https://sonora-music-b1ee.onrender.com';
   var _northflankUrl = '';
   var _northflankToken = '';
@@ -38,6 +38,7 @@
     if (_mode === 'local') return _localUrl;
     if (_mode === 'render') return _renderUrl;
     if (_mode === 'northflank') return _northflankUrl;
+    // 'device' y 'off' no tienen servidor: todo funciona con datos locales.
     return '';
   }
 
@@ -83,12 +84,19 @@
     var dot = document.getElementById('server-dot');
     if (dot) {
       dot.className = 'server-dot ' + (
-        mode === 'local' ? 'connected-local' : (
-          mode === 'northflank' ? 'connected-northflank' : (
-            mode === 'render' ? 'connected-render' : 'disconnected'
+        mode === 'device' ? 'server-dot--device' : (
+          mode === 'local' ? 'connected-local' : (
+            mode === 'northflank' ? 'connected-northflank' : (
+              mode === 'render' ? 'connected-render' : 'disconnected'
+            )
           )
         )
       );
+      if (mode === 'device') dot.title = 'Modo Dispositivo · solo música local';
+      else if (mode === 'local') dot.title = 'Servidor local';
+      else if (mode === 'render') dot.title = 'Servidor en la nube';
+      else if (mode === 'northflank') dot.title = 'Servidor Northflank';
+      else dot.title = 'Sin conexión con el servidor';
     }
   }
 
@@ -97,7 +105,9 @@
      * Set connection mode
      */
     setMode: function (mode) {
-      _mode = mode || 'off';
+      // El modelo nuevo no tiene "sin conexión": si no hay servidor,
+      // la app vive en Modo Dispositivo con la música local.
+      _mode = (!mode || mode === 'off') ? 'device' : mode;
       Sonora.Store.set('serverMode', _mode);
       saveSettingPersistent('serverMode', _mode);
       saveSettingPersistent('server_mode', _mode);
@@ -381,6 +391,10 @@
      * Returns { ok: boolean, latency: number, server: string, data?: object, error?: string }
      */
     testConnection: function (mode, timeout) {
+      // Modo Dispositivo: no hay red que probar; siempre está disponible.
+      if (mode === 'device') {
+        return Promise.resolve({ ok: true, latency: 0, server: 'device', local: true });
+      }
       var url = mode === 'local' ? _localUrl : (mode === 'northflank' ? _northflankUrl : _renderUrl);
       var start = Date.now();
       var defaultTimeout = mode === 'local' ? 5000 : (mode === 'northflank' ? 9000 : 25000);
@@ -447,15 +461,16 @@
                 Sonora.API.setMode('render');
                 return { mode: 'render', result: r1 };
               }
-              // Si no responde ningún servidor, modo offline
-              Sonora.API.setMode('off');
-              return { mode: 'off', result: null };
+              // Si no responde ningún servidor, seguimos en Modo Dispositivo:
+              // la app conserva música local, playlists, favoritos e historial.
+              Sonora.API.setMode('device');
+              return { mode: 'device', result: null };
             });
           });
         });
       }).catch(function () {
-        Sonora.API.setMode('off');
-        return { mode: 'off', result: null };
+        Sonora.API.setMode('device');
+        return { mode: 'device', result: null };
       });
     },
 
@@ -463,7 +478,8 @@
      * Sync local data with server
      */
     syncWithServer: function () {
-      if (_mode === 'off') return Promise.resolve();
+      // En Modo Dispositivo (o sin servidor) no hay nada que sincronizar.
+      if (_mode === 'device' || _mode === 'off') return Promise.resolve();
 
       return Sonora.API.get('/tracks').then(function (serverTracks) {
         if (!serverTracks || !serverTracks.length) return;
@@ -511,6 +527,12 @@
         Sonora.Store.set('activeServerUrl', getBaseUrl());
         updateStatusDotUI(_mode);
 
+        // Modo Dispositivo explícito: no se toca la red ni se cambia solo.
+        if (_mode === 'device') {
+          console.log('[API] Device mode: no server probing');
+          return { mode: 'device', result: null };
+        }
+
         // Si el usuario tenía un modo activo guardado ('local', 'northflank', 'render'),
         // probamos ese primero para respetar su configuración manual
         if (savedMode && savedMode !== 'off') {
@@ -529,15 +551,16 @@
           });
         }
 
-        // Si el modo era 'off' o nuevo usuario, comprobamos disponibilidad
-        return Sonora.API.autoDetect();
+        // Sin modo guardado: arrancamos en Modo Dispositivo. El usuario puede
+        // elegir Local/Render/Northflank desde Ajustes cuando quiera.
+        return { mode: _mode, result: null };
       }).then(function () {
         Sonora.Store.set('serverMode', _mode);
         Sonora.Store.set('activeServerUrl', getBaseUrl());
         updateStatusDotUI(_mode);
       }).catch(function (err) {
         console.warn('[API] Init error:', err);
-        Sonora.API.setMode('off');
+        Sonora.API.setMode('device');
       });
     }
   };

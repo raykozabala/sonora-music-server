@@ -244,15 +244,20 @@
               color: #FF5252;
               border-color: rgba(255, 82, 82, 0.3);
             }
+            .server-mode-indicator.mode-device {
+              background: rgba(var(--color-primary-rgb, 255, 71, 87), 0.15);
+              color: var(--color-primary, #FF4757);
+              border-color: rgba(var(--color-primary-rgb, 255, 71, 87), 0.35);
+            }
             /* Server Cards */
             .server-cards-grid {
               display: grid;
               grid-template-columns: 1fr;
-              gap: 16px;
+              gap: 14px;
             }
             @media (min-width: 680px) {
               .server-cards-grid {
-                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                grid-template-columns: repeat(2, minmax(0, 1fr));
               }
             }
             .server-card {
@@ -263,7 +268,13 @@
               display: flex;
               flex-direction: column;
               gap: 12px;
-              transition: border-color 0.2s ease, box-shadow 0.2s ease;
+              min-width: 0;
+              cursor: pointer;
+              transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+            }
+            .server-card:focus-visible {
+              outline: 2px solid var(--color-primary, #FF4757);
+              outline-offset: 2px;
             }
             .server-card.active-server {
               border-color: var(--color-primary, #FF4757);
@@ -273,11 +284,15 @@
               display: flex;
               align-items: center;
               justify-content: space-between;
+              gap: 10px;
+              flex-wrap: wrap;
             }
             .server-card__identity {
               display: flex;
               align-items: center;
               gap: 10px;
+              min-width: 0;
+              flex: 1 1 auto;
             }
             .server-icon {
               width: 36px;
@@ -288,10 +303,15 @@
               align-items: center;
               justify-content: center;
               font-size: 18px;
+              flex-shrink: 0;
+            }
+            body.light .server-icon {
+              background: rgba(0, 0, 0, 0.06);
             }
             .server-card__title-box {
               display: flex;
               flex-direction: column;
+              min-width: 0;
             }
             .server-card__name {
               font-size: 14px;
@@ -299,6 +319,36 @@
               display: flex;
               align-items: center;
               gap: 6px;
+              min-width: 0;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+            .server-card__hint {
+              margin: 0;
+              font-size: 11.5px;
+              line-height: 1.45;
+              color: var(--color-text-secondary, #A0A5BA);
+            }
+            /* Selección tipo radio: solo una fuente activa */
+            .server-radio {
+              width: 20px;
+              height: 20px;
+              border-radius: 50%;
+              border: 2px solid var(--color-divider, rgba(255, 255, 255, 0.2));
+              flex-shrink: 0;
+              position: relative;
+              transition: border-color 0.2s ease;
+            }
+            .server-card.active-server .server-radio {
+              border-color: var(--color-primary, #FF4757);
+            }
+            .server-card.active-server .server-radio::after {
+              content: "";
+              position: absolute;
+              inset: 3px;
+              border-radius: 50%;
+              background: var(--color-primary, #FF4757);
             }
             .status-dot {
               width: 10px;
@@ -392,6 +442,8 @@
               display: flex;
               align-items: center;
               justify-content: space-between;
+              gap: 8px;
+              flex-wrap: wrap;
               padding-top: 4px;
             }
             .server-latency-tag {
@@ -448,6 +500,7 @@
               display: inline-flex;
               align-items: center;
               gap: 6px;
+              white-space: nowrap;
               transition: transform 0.15s ease, opacity 0.15s ease;
             }
             .btn-pill:active {
@@ -713,6 +766,26 @@
               opacity: 1;
               transform: translateX(-50%) translateY(0);
             }
+            @media (max-width: 420px) {
+              .server-card__bottom {
+                justify-content: flex-start;
+              }
+              .server-card__name {
+                white-space: normal;
+              }
+            }
+            @media (max-height: 520px) and (orientation: landscape) and (max-width: 1023px) {
+              .page-settings {
+                padding-bottom: 110px;
+              }
+              .server-cards-grid {
+                grid-template-columns: 1fr;
+              }
+              .server-card {
+                padding: 12px;
+                gap: 10px;
+              }
+            }
           </style>
 
           <h1 class="settings-main-title">Ajustes</h1>
@@ -721,7 +794,7 @@
           <section class="settings-section settings-section--featured">
             <div class="settings-section__header">
               <h2 class="settings-section__title">
-                🌐 Conexión al Servidor
+                🌐 Fuente de música
               </h2>
               <span class="server-mode-indicator mode-off" id="server-mode-badge">
                 <span class="status-dot disconnected" id="overall-status-dot"></span>
@@ -729,9 +802,27 @@
               </span>
             </div>
 
-            <div class="server-cards-grid">
+            <div class="server-cards-grid" role="radiogroup" aria-label="Fuente de música">
+              <!-- Este dispositivo -->
+              <div class="server-card" id="card-server-device" data-mode="device" role="radio" tabindex="0" aria-checked="false">
+                <div class="server-card__top">
+                  <div class="server-card__identity">
+                    <div class="server-icon">📱</div>
+                    <div class="server-card__title-box">
+                      <span class="server-card__name">
+                        Este dispositivo
+                        <span class="status-dot connected" id="device-status-dot"></span>
+                      </span>
+                      <span class="server-card__subtitle">Música local, sin servidor</span>
+                    </div>
+                  </div>
+                  <span class="server-radio" aria-hidden="true"></span>
+                </div>
+                <p class="server-card__hint">Playlists, favoritos, historial y descargas funcionan sin internet. YouTube necesita un servidor.</p>
+              </div>
+
               <!-- Servidor Local -->
-              <div class="server-card" id="card-server-local">
+              <div class="server-card" id="card-server-local" data-mode="local" role="radio" tabindex="0" aria-checked="false">
                 <div class="server-card__top">
                   <div class="server-card__identity">
                     <div class="server-icon">💻</div>
@@ -740,28 +831,23 @@
                         Servidor Local
                         <span class="status-dot disconnected" id="local-status-dot"></span>
                       </span>
-                      <span class="server-card__subtitle">Mi Computadora</span>
+                      <span class="server-card__subtitle">Tu computadora en la misma Wi-Fi</span>
                     </div>
                   </div>
-                  <label class="switch" title="Activar/desactivar servidor local">
-                    <input type="checkbox" id="toggle-server-local" />
-                    <span class="slider"></span>
-                  </label>
+                  <span class="server-radio" aria-hidden="true"></span>
                 </div>
 
                 <input type="url" id="input-server-local-url" class="server-url-input"
-                       value="http://MacBook-Air-de-Rayko.local:3000" placeholder="http://MacBook-Air-de-Rayko.local:3000 o http://192.168.1.x:3000" spellcheck="false" />
+                       value="" placeholder="http://192.168.1.10:3000" spellcheck="false" />
 
                 <div class="server-card__bottom">
-                  <button class="btn-pill btn-pill--secondary" id="btn-test-local">
-                    ⚡ Probar conexión
-                  </button>
+                  <button class="btn-pill btn-pill--secondary" id="btn-test-local">Probar</button>
                   <span class="server-latency-tag" id="latency-local-text">Sin probar</span>
                 </div>
               </div>
 
               <!-- Servidor Render -->
-              <div class="server-card" id="card-server-render">
+              <div class="server-card" id="card-server-render" data-mode="render" role="radio" tabindex="0" aria-checked="false">
                 <div class="server-card__top">
                   <div class="server-card__identity">
                     <div class="server-icon">☁️</div>
@@ -770,52 +856,42 @@
                         Servidor Render
                         <span class="status-dot disconnected" id="render-status-dot"></span>
                       </span>
-                      <span class="server-card__subtitle">Online (Nube)</span>
+                      <span class="server-card__subtitle">Nube · puede tardar en despertar</span>
                     </div>
                   </div>
-                  <label class="switch" title="Activar/desactivar servidor Render">
-                    <input type="checkbox" id="toggle-server-render" />
-                    <span class="slider"></span>
-                  </label>
+                  <span class="server-radio" aria-hidden="true"></span>
                 </div>
 
                 <input type="url" id="input-server-render-url" class="server-url-input"
-                       value="https://sonora-music-b1ee.onrender.com" placeholder="https://sonora-music-b1ee.onrender.com" spellcheck="false" />
+                       value="" placeholder="https://tu-servidor.onrender.com" spellcheck="false" />
 
                 <div class="server-card__bottom">
-                  <button class="btn-pill btn-pill--secondary" id="btn-test-render">
-                    ⚡ Probar conexión
-                  </button>
+                  <button class="btn-pill btn-pill--secondary" id="btn-test-render">Probar</button>
                   <span class="server-latency-tag" id="latency-render-text">Sin probar</span>
                 </div>
               </div>
 
-              <!-- Servidor Northflank (Opción 3) -->
-              <div class="server-card" id="card-server-northflank">
+              <!-- Servidor Northflank -->
+              <div class="server-card" id="card-server-northflank" data-mode="northflank" role="radio" tabindex="0" aria-checked="false">
                 <div class="server-card__top">
                   <div class="server-card__identity">
-                    <div class="server-icon" style="background: rgba(108, 92, 231, 0.2); color: #a29bfe;">🚀</div>
+                    <div class="server-icon">🚀</div>
                     <div class="server-card__title-box">
                       <span class="server-card__name">
                         Servidor Northflank
                         <span class="status-dot disconnected" id="northflank-status-dot"></span>
                       </span>
-                      <span class="server-card__subtitle">Cloud Pro (Microservicios)</span>
+                      <span class="server-card__subtitle">Nube siempre activa</span>
                     </div>
                   </div>
-                  <label class="switch" title="Activar/desactivar servidor Northflank">
-                    <input type="checkbox" id="toggle-server-northflank" />
-                    <span class="slider"></span>
-                  </label>
+                  <span class="server-radio" aria-hidden="true"></span>
                 </div>
 
                 <input type="url" id="input-server-northflank-url" class="server-url-input"
-                       value="" placeholder="https://http--sonora-music-server--xxxx.code.run" spellcheck="false" />
+                       value="" placeholder="https://tu-servidor.code.run" spellcheck="false" />
 
                 <div class="server-card__bottom">
-                  <button class="btn-pill btn-pill--secondary" id="btn-test-northflank">
-                    ⚡ Probar conexión
-                  </button>
+                  <button class="btn-pill btn-pill--secondary" id="btn-test-northflank">Probar</button>
                   <span class="server-latency-tag" id="latency-northflank-text">Sin probar</span>
                 </div>
               </div>
@@ -1119,7 +1195,7 @@
               </svg>
 
               <h3 class="about-title">Sonora Music</h3>
-              <span class="about-version-badge">v7.12.1 (Build 2026)</span>
+              <span class="about-version-badge">v7.13.0 (Build 2026)</span>
 
               <div class="about-stats-summary" id="about-stats-summary">
                 <span id="about-tracks-count">🎵 0 pistas</span> •
@@ -1171,9 +1247,6 @@
      * Handles Local, Render & Northflank servers, URLs, toggles, test latency, and state sync
      */
     async initServerSection() {
-      const toggleLocal = $('#toggle-server-local');
-      const toggleRender = $('#toggle-server-render');
-      const toggleNorthflank = $('#toggle-server-northflank');
       const inputLocal = $('#input-server-local-url');
       const inputRender = $('#input-server-render-url');
       const inputNorthflank = $('#input-server-northflank-url');
@@ -1183,45 +1256,54 @@
       const latencyLocal = $('#latency-local-text');
       const latencyRender = $('#latency-render-text');
       const latencyNorthflank = $('#latency-northflank-text');
+      const dotDevice = $('#device-status-dot');
       const dotLocal = $('#local-status-dot');
       const dotRender = $('#render-status-dot');
       const dotNorthflank = $('#northflank-status-dot');
       const modeBadge = $('#server-mode-badge');
       const modeText = $('#server-mode-text');
       const overallDot = $('#overall-status-dot');
+      const cardDevice = $('#card-server-device');
       const cardLocal = $('#card-server-local');
       const cardRender = $('#card-server-render');
       const cardNorthflank = $('#card-server-northflank');
+      const cards = [
+        { mode: 'device', el: cardDevice },
+        { mode: 'local', el: cardLocal },
+        { mode: 'render', el: cardRender },
+        { mode: 'northflank', el: cardNorthflank }
+      ];
 
       // Load saved settings
-      let localUrl = await getSetting('server_local_url', 'http://MacBook-Air-de-Rayko.local:3000');
+      let localUrl = await getSetting('server_local_url', '');
       let renderUrl = await getSetting('server_render_url', 'https://sonora-music-b1ee.onrender.com');
       let northflankUrl = await getSetting('server_northflank_url', '');
-      let serverMode = await getSetting('server_mode', 'off'); // 'local' | 'render' | 'northflank' | 'off'
+      let serverMode = await getSetting('server_mode', 'device'); // 'device' | 'local' | 'render' | 'northflank'
 
       if (inputLocal) inputLocal.value = localUrl;
       if (inputRender) inputRender.value = renderUrl;
       if (inputNorthflank) inputNorthflank.value = northflankUrl;
 
-      // Update toggles based on mode
-      if (toggleLocal) toggleLocal.checked = (serverMode === 'local');
-      if (toggleNorthflank) toggleNorthflank.checked = (serverMode === 'northflank');
-      if (toggleRender) toggleRender.checked = (serverMode === 'render');
+      // Update card selection based on mode
+      const paintCards = (mode) => {
+        cards.forEach(({ mode: m, el }) => {
+          if (!el) return;
+          const active = m === mode;
+          el.classList.toggle('active-server', active);
+          el.setAttribute('aria-checked', active ? 'true' : 'false');
+        });
+      };
+      paintCards(serverMode);
 
       // Update UI Mode display
       const updateModeUI = (mode) => {
+        paintCards(mode);
         if (!modeBadge || !modeText || !overallDot) return;
         modeBadge.className = 'server-mode-indicator mode-' + mode;
 
-        if (cardLocal) cardLocal.classList.toggle('active-server', mode === 'local');
-        if (cardNorthflank) cardNorthflank.classList.toggle('active-server', mode === 'northflank');
-        if (cardRender) cardRender.classList.toggle('active-server', mode === 'render');
-
-        if (toggleLocal) toggleLocal.checked = (mode === 'local');
-        if (toggleNorthflank) toggleNorthflank.checked = (mode === 'northflank');
-        if (toggleRender) toggleRender.checked = (mode === 'render');
-
-        if (mode === 'local') {
+        if (mode === 'device') {
+          modeText.textContent = 'Este dispositivo';
+        } else if (mode === 'local') {
           modeText.textContent = 'Servidor Local';
         } else if (mode === 'northflank') {
           modeText.textContent = 'Servidor Northflank';
@@ -1248,7 +1330,11 @@
       const refreshOverallBadge = () => {
         if (!overallDot) return;
         let st = null;
-        if (serverMode === 'local') {
+        if (serverMode === 'device') {
+          // Modo Dispositivo: siempre disponible, sin red.
+          overallDot.className = 'status-dot connected';
+          return;
+        } else if (serverMode === 'local') {
           st = probeState.local;
         } else if (serverMode === 'northflank') {
           st = probeState.northflank;
@@ -1295,14 +1381,17 @@
         }
         refreshOverallBadge();
       };
-      autoColorDot('local', dotLocal, latencyLocal);
-      autoColorDot('northflank', dotNorthflank, latencyNorthflank);
-      autoColorDot('render', dotRender, latencyRender);
+      // Solo sondeamos la fuente activa: Render puede tardar 25 s en despertar
+      // y no tiene sentido bloquear Ajustes probando servidores que no se usan.
+      if (serverMode === 'local') autoColorDot('local', dotLocal, latencyLocal);
+      else if (serverMode === 'northflank') autoColorDot('northflank', dotNorthflank, latencyNorthflank);
+      else if (serverMode === 'render') autoColorDot('render', dotRender, latencyRender);
 
       updateModeUI(serverMode);
 
       // Synchronization function
       const syncServerMode = async (newMode) => {
+        if (!newMode || newMode === serverMode) return;
         serverMode = newMode;
         updateModeUI(newMode);
         await setSetting('server_mode', newMode);
@@ -1315,78 +1404,34 @@
           Sonora.Store.set('serverMode', newMode);
         }
 
+        if (newMode === 'device') {
+          showToast('Modo Dispositivo: música local sin servidor');
+          return;
+        }
+
         // Test de inmediato para actualizar el indicador activo
         if (newMode === 'local') autoColorDot('local', dotLocal, latencyLocal);
         else if (newMode === 'northflank') autoColorDot('northflank', dotNorthflank, latencyNorthflank);
         else if (newMode === 'render') autoColorDot('render', dotRender, latencyRender);
       };
 
-      // Toggle changes logic:
-      if (toggleLocal) {
-        addTrackedListener(toggleLocal, 'change', async () => {
-          if (toggleLocal.checked) {
-            if (toggleNorthflank) toggleNorthflank.checked = false;
-            if (toggleRender) toggleRender.checked = false;
-            await syncServerMode('local');
-            showToast('Servidor Local activado');
-          } else {
-            if (toggleNorthflank && toggleNorthflank.checked) {
-              await syncServerMode('northflank');
-              showToast('Cambiado a Servidor Northflank');
-            } else if (toggleRender && toggleRender.checked) {
-              await syncServerMode('render');
-              showToast('Cambiado a Servidor Render');
-            } else {
-              await syncServerMode('off');
-              showToast('Modo sin conexión');
-            }
+      // Selección de fuente: una sola tarjeta activa (radio).
+      cards.forEach(({ mode, el }) => {
+        if (!el) return;
+        const choose = () => { syncServerMode(mode); };
+        addTrackedListener(el, 'click', (e) => {
+          // Los controles internos (input, botones de probar) no cambian la fuente.
+          if (e.target.closest('input, button')) return;
+          choose();
+        });
+        addTrackedListener(el, 'keydown', (e) => {
+          if (e.target !== el) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            choose();
           }
         });
-      }
-
-      if (toggleNorthflank) {
-        addTrackedListener(toggleNorthflank, 'change', async () => {
-          if (toggleNorthflank.checked) {
-            if (toggleLocal) toggleLocal.checked = false;
-            if (toggleRender) toggleRender.checked = false;
-            await syncServerMode('northflank');
-            showToast('Servidor Northflank activado');
-          } else {
-            if (toggleLocal && toggleLocal.checked) {
-              await syncServerMode('local');
-              showToast('Cambiado a Servidor Local');
-            } else if (toggleRender && toggleRender.checked) {
-              await syncServerMode('render');
-              showToast('Cambiado a Servidor Render');
-            } else {
-              await syncServerMode('off');
-              showToast('Modo sin conexión');
-            }
-          }
-        });
-      }
-
-      if (toggleRender) {
-        addTrackedListener(toggleRender, 'change', async () => {
-          if (toggleRender.checked) {
-            if (toggleLocal) toggleLocal.checked = false;
-            if (toggleNorthflank) toggleNorthflank.checked = false;
-            await syncServerMode('render');
-            showToast('Servidor Render activado');
-          } else {
-            if (toggleLocal && toggleLocal.checked) {
-              await syncServerMode('local');
-              showToast('Cambiado a Servidor Local');
-            } else if (toggleNorthflank && toggleNorthflank.checked) {
-              await syncServerMode('northflank');
-              showToast('Cambiado a Servidor Northflank');
-            } else {
-              await syncServerMode('off');
-              showToast('Modo sin conexión');
-            }
-          }
-        });
-      }
+      });
 
       // URL input changes
       if (inputLocal) {

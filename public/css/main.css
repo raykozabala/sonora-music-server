@@ -2068,6 +2068,12 @@ body.light .skeleton {
   box-shadow: 0 0 9px rgba(239, 68, 68, 0.7);
 }
 
+/* 📱 Modo Dispositivo (sin servidor, música local) */
+.server-dot.server-dot--device {
+  background: var(--color-primary);
+  box-shadow: 0 0 9px rgba(var(--color-primary-rgb), 0.85);
+}
+
 /* ── Etiquetas de origen de la música ──
    "Del dispositivo" = archivo del teléfono (no necesita servidor).
    "Guardado en Sonora" = audio guardado dentro de la app (offline real). */

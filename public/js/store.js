@@ -109,7 +109,7 @@
         serverRenderUrl: 'https://sonora-music-b1ee.onrender.com',
         serverNorthflankUrl: '',
         serverNorthflankToken: '',
-        appVersion: '7.12.1',
+        appVersion: '7.13.0',
         language: 'es',
         customBg: null,
         currentPage: 'home',

@@ -189,18 +189,41 @@
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
   }
 
-  function getServerBaseUrl() {
+  function isDeviceMode() {
+    try {
+      if (Sonora.API && typeof Sonora.API.getMode === 'function') {
+        const mode = Sonora.API.getMode();
+        if (mode === 'device' || mode === 'off') return true;
+        if (mode === 'local' || mode === 'render' || mode === 'northflank') return false;
+      }
+    } catch (e) {}
+    return !getServerBaseUrlRaw();
+  }
+
+  function getServerBaseUrlRaw() {
     if (Sonora.API && typeof Sonora.API.getActiveUrl === 'function') {
       return Sonora.API.getActiveUrl();
     }
-    const mode = Sonora.Store ? Sonora.Store.get('serverMode') : 'local';
+    return '';
+  }
+
+  function getServerBaseUrl() {
+    // Modo Dispositivo: no hay servidor, así que no inventamos una IP local.
+    if (isDeviceMode()) return '';
+    if (Sonora.API && typeof Sonora.API.getActiveUrl === 'function') {
+      return Sonora.API.getActiveUrl();
+    }
+    const mode = Sonora.Store ? Sonora.Store.get('serverMode') : 'device';
     if (mode === 'northflank') {
-      return (Sonora.Store && Sonora.Store.get('serverNorthflankUrl')) || 'https://api.northflank.com';
+      return (Sonora.Store && Sonora.Store.get('serverNorthflankUrl')) || '';
     }
     if (mode === 'render') {
       return (Sonora.Store && Sonora.Store.get('serverRenderUrl')) || 'https://sonora-music-b1ee.onrender.com';
     }
-    return (Sonora.Store && Sonora.Store.get('serverLocalUrl')) || 'http://192.168.1.132:3000';
+    if (mode === 'local') {
+      return (Sonora.Store && Sonora.Store.get('serverLocalUrl')) || '';
+    }
+    return '';
   }
 
   function getRenderUrl() {
@@ -648,8 +671,8 @@
             .search-mode-toggle {
               display: flex;
               gap: 6px;
-              background: rgba(255,255,255,0.06);
-              border: 1px solid rgba(255,255,255,0.08);
+              background: var(--color-surface-elevated);
+              border: 1px solid var(--color-card-border, rgba(255, 255, 255, 0.08));
               border-radius: 14px;
               padding: 4px;
               margin-bottom: 10px;
@@ -687,7 +710,7 @@
               border-radius: 12px;
               padding: 0 12px;
               height: 48px;
-              border: 1px solid rgba(255, 255, 255, 0.1);
+              border: 1px solid var(--color-divider);
               transition: border-color 0.2s, box-shadow 0.2s;
             }
             .search-bar:focus-within {
@@ -1170,6 +1193,28 @@
               margin-bottom: 4px;
             }
             .search-empty-desc { font-size: 13px; color: var(--color-text-secondary); }
+            .search-device-actions {
+              display: flex;
+              gap: 8px;
+              justify-content: center;
+              flex-wrap: wrap;
+              margin-top: 16px;
+            }
+            .search-device-actions .btn {
+              padding: 10px 20px;
+              border-radius: 22px;
+              font-size: 13px;
+              font-weight: 700;
+              cursor: pointer;
+              border: 1px solid var(--color-divider);
+              background: var(--color-surface-elevated);
+              color: var(--color-text-primary);
+            }
+            .search-device-actions .btn--primary {
+              background: var(--color-primary);
+              border-color: var(--color-primary);
+              color: var(--color-on-primary);
+            }
 
             /* Cargando */
             .search-loading { padding: 44px 20px; text-align: center; }
@@ -1658,6 +1703,23 @@
             return;
           }
 
+          // Modo Dispositivo: atajos a biblioteca y ajustes
+          const goLibraryBtn = target.closest('[data-action="go-library"]');
+          if (goLibraryBtn) {
+            if (Sonora.Router && typeof Sonora.Router.navigate === 'function') {
+              Sonora.Router.navigate('library');
+            }
+            return;
+          }
+
+          const goSettingsBtn = target.closest('[data-action="go-settings"]');
+          if (goSettingsBtn) {
+            if (Sonora.Router && typeof Sonora.Router.navigate === 'function') {
+              Sonora.Router.navigate('settings');
+            }
+            return;
+          }
+
           const chip = target.closest('.search-chip');
           if (chip && !target.closest('.chip-delete')) {
             const query = chip.getAttribute('data-query');
@@ -1823,6 +1885,25 @@
     const controller = new AbortController();
     searchController = controller;
     const token = ++searchToken;
+
+    // Modo Dispositivo: la búsqueda online necesita un servidor.
+    if (isDeviceMode()) {
+      currentExternalResults = [];
+      if (contentContainer) {
+        contentContainer.innerHTML = `
+          <div class="search-empty-state search-empty-state--device">
+            <div class="search-empty-icon">📱</div>
+            <h3 class="search-empty-title">Modo Dispositivo</h3>
+            <p class="search-empty-desc">Para buscar en YouTube y SoundCloud necesitas un servidor. Tu música local sigue disponible en Biblioteca.</p>
+            <div class="search-device-actions">
+              <button class="btn btn--primary" data-action="go-library">Ver mi biblioteca</button>
+              <button class="btn" data-action="go-settings">Elegir servidor</button>
+            </div>
+          </div>
+        `;
+      }
+      return;
+    }
 
     if (contentContainer) {
       contentContainer.innerHTML = `
