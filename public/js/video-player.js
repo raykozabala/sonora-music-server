@@ -38,15 +38,21 @@
 
   /* ── Helpers ────────────────────────────────────────────────────────── */
   function getServerBase() {
+    // getMediaBase() usa el servidor activo o, en Modo Dispositivo, la nube
+    // de Sonora. Antes esta función devolvía una IP local fija y el
+    // reproductor de video no funcionaba fuera de esa red.
+    if (Sonora.API && typeof Sonora.API.getMediaBase === 'function') {
+      return String(Sonora.API.getMediaBase() || '').replace(/\/+$/, '');
+    }
     if (Sonora.API && typeof Sonora.API.getActiveUrl === 'function') {
-      return String(Sonora.API.getActiveUrl()).replace(/\/+$/, '');
+      return String(Sonora.API.getActiveUrl() || '').replace(/\/+$/, '');
     }
     try {
       if (window.location && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
-        return window.location.origin;
+        return String(window.location.origin).replace(/\/+$/, '');
       }
     } catch (e) {}
-    return 'http://192.168.1.132:3000';
+    return '';
   }
 
   function formatTime(sec) {
@@ -84,7 +90,9 @@
   }
 
   function streamUrl(video, quality, mode) {
-    return getServerBase() + '/api/video/stream?url=' + encodeURIComponent(targetUrl(video)) +
+    var base = getServerBase();
+    if (!base) return '';
+    return base + '/api/video/stream?url=' + encodeURIComponent(targetUrl(video)) +
       '&quality=' + encodeURIComponent(quality || '720p') +
       (mode ? '&mode=' + encodeURIComponent(mode) : '');
   }
@@ -429,9 +437,15 @@
     } else {
       // Online: pista de vídeo + pista de audio DASH sincronizadas.
       // YouTube ya no entrega MP4 progresivos (403), pero estas sí.
+      var videoSrc = streamUrl(st.video, st.quality, 'video');
+      if (!videoSrc) {
+        showSpinner(false);
+        useYouTubeIframe();
+        return;
+      }
       st.split = true;
       v.muted = true;
-      v.src = streamUrl(st.video, st.quality, 'video');
+      v.src = videoSrc;
       if (a) {
         a.classList.remove('hidden');
         a.src = streamUrl(st.video, st.quality, 'audio');
@@ -872,7 +886,9 @@
       // 2. Si no hay guardados, los pedimos al servidor (sólo online).
       if (!text) {
         if (st.opts.blob) throw new Error('Sin subtítulos guardados');
-        var url = getServerBase() + '/api/video/subtitles?url=' + encodeURIComponent(targetUrl(st.video)) +
+        var subBase = getServerBase();
+        if (!subBase) throw new Error('Sin servidor de subtítulos');
+        var url = subBase + '/api/video/subtitles?url=' + encodeURIComponent(targetUrl(st.video)) +
           '&lang=' + encodeURIComponent(lang) + '&auto=1';
         var resp = await fetch(url);
         if (!resp.ok) throw new Error('HTTP ' + resp.status);

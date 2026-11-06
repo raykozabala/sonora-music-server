@@ -1110,28 +1110,6 @@
 
             <div class="setting-item-row setting-item-row--inline">
               <div class="setting-label-box">
-                <span class="setting-label-title">Nuevas canciones</span>
-                <span class="setting-label-sub">Avisos de nuevos lanzamientos de tus artistas</span>
-              </div>
-              <label class="switch">
-                <input type="checkbox" id="notify-new-tracks" checked />
-                <span class="slider"></span>
-              </label>
-            </div>
-
-            <div class="setting-item-row setting-item-row--inline">
-              <div class="setting-label-box">
-                <span class="setting-label-title">Recomendaciones</span>
-                <span class="setting-label-sub">Mixes y listas personalizadas para ti</span>
-              </div>
-              <label class="switch">
-                <input type="checkbox" id="notify-recommendations" checked />
-                <span class="slider"></span>
-              </label>
-            </div>
-
-            <div class="setting-item-row setting-item-row--inline">
-              <div class="setting-label-box">
                 <span class="setting-label-title">Actualizaciones de la app</span>
                 <span class="setting-label-sub">Novedades de versiones y mejoras</span>
               </div>
@@ -1166,6 +1144,26 @@
               </button>
             </div>
 
+            <div class="setting-item-row setting-item-row--inline">
+              <div class="setting-label-box">
+                <span class="setting-label-title">Letras guardadas</span>
+                <span class="setting-label-sub">Borrar la caché de letras (se vuelven a buscar)</span>
+              </div>
+              <button class="btn-pill btn-pill--secondary" id="btn-clear-lyrics-cache">
+                Borrar letras
+              </button>
+            </div>
+
+            <div class="setting-item-row setting-item-row--inline">
+              <div class="setting-label-box">
+                <span class="setting-label-title">Caché de la aplicación</span>
+                <span class="setting-label-sub">Liberar archivos temporales sin borrar tu música</span>
+              </div>
+              <button class="btn-pill btn-pill--secondary" id="btn-clear-app-cache">
+                Limpiar caché
+              </button>
+            </div>
+
             <div class="setting-item-row setting-item-row--inline" style="margin-top:8px;">
               <div class="setting-label-box">
                 <span class="setting-label-title" style="color:#FF5252;">Restablecer aplicación</span>
@@ -1195,7 +1193,12 @@
               </svg>
 
               <h3 class="about-title">Sonora Music</h3>
-              <span class="about-version-badge">v7.13.0 (Build 2026)</span>
+              <div style="display:flex;align-items:center;gap:10px;margin:6px 0;flex-wrap:wrap;justify-content:center;">
+                <span class="about-version-badge">v7.17.0 (Build 2026)</span>
+                <button id="btn-check-updates" class="btn-update-action" style="padding:4px 12px;font-size:11px;" title="Buscar nuevas versiones">
+                  🔄 Buscar actualizaciones
+                </button>
+              </div>
 
               <div class="about-stats-summary" id="about-stats-summary">
                 <span id="about-tracks-count">🎵 0 pistas</span> •
@@ -1208,11 +1211,11 @@
               </p>
 
               <div class="about-links">
-                <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="about-link">GitHub</a>
+                <a href="https://github.com/raykozabala/sonora-music-server" target="_blank" rel="noopener noreferrer" class="about-link">GitHub</a>
                 <span style="color:var(--color-divider);">•</span>
-                <a href="#" id="link-about-web" class="about-link">Sitio Web</a>
+                <a href="https://sonora-music-b1ee.onrender.com" target="_blank" rel="noopener noreferrer" id="link-about-web" class="about-link">Sitio Web</a>
                 <span style="color:var(--color-divider);">•</span>
-                <a href="#" id="link-about-feedback" class="about-link">Sugerencias</a>
+                <a href="https://github.com/raykozabala/sonora-music-server/issues" target="_blank" rel="noopener noreferrer" id="link-about-feedback" class="about-link">Sugerencias</a>
               </div>
             </div>
           </section>
@@ -1863,17 +1866,35 @@
           btn.classList.add('active');
           const q = btn.getAttribute('data-quality');
           await setSetting('audio_quality', q);
-          showToast(`Calidad de audio: ${btn.textContent.trim()}`);
+          // Alias que ya usaba la base de datos; el reproductor lee
+          // sonora_audio_quality en localStorage al resolver cada pista.
+          await setSetting('audioQuality', q);
+          showToast(`Calidad de audio: ${btn.textContent.trim()} (se aplica a la próxima canción)`);
         });
       });
 
       // 4. Sleep timer presets
       const timerBtns = $$('#control-sleep-timer .segmented-btn');
       const savedTimer = await getSetting('sleep_timer', '0');
+      const savedTimerEnd = Number(await getSetting('sleep_timer_end', 0)) || 0;
       const markTimerActive = (val) => {
         timerBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-timer') === String(val)));
       };
-      markTimerActive(savedTimer);
+
+      // Refleja el estado REAL: si el tiempo ya venció, no lo pintamos activo.
+      let activeTimer = '0';
+      if (savedTimer === 'end_track') {
+        activeTimer = 'end_track';
+      } else if (Number(savedTimer) > 0 && savedTimerEnd > Date.now()) {
+        activeTimer = String(savedTimer);
+      } else if (Number(savedTimer) > 0 && !savedTimerEnd) {
+        // Compatibilidad con versiones anteriores sin fecha de fin: se
+        // reprograma la duración elegida en lugar de mostrar algo falso.
+        Sonora.Player.setSleepTimer(Number(savedTimer), true);
+        activeTimer = String(savedTimer);
+      }
+      markTimerActive(activeTimer);
+
       timerBtns.forEach(btn => {
         addTrackedListener(btn, 'click', async () => {
           const val = btn.getAttribute('data-timer');
@@ -1882,6 +1903,9 @@
           }
           markTimerActive(val);
           await setSetting('sleep_timer', val);
+          await setSetting('sleep_timer_end', val === '0' || val === 'end_track'
+            ? 0
+            : Date.now() + (Number(val) * 60 * 1000));
           if (val === '0') showToast('Temporizador desactivado');
           else if (val === 'end_track') showToast('Se pausará al terminar esta canción');
           else showToast(`Temporizador programado: ${btn.textContent.trim()}`);
@@ -1899,18 +1923,41 @@
       const listEl = $('#downloaded-tracks-list');
       const btnClearAll = $('#btn-clear-all-downloads');
 
+      const readDownloadRecords = async () => {
+        // Usamos los registros completos (id + trackId + tamaño). Antes se
+        // listaban solo pistas que seguían existiendo en la biblioteca; si la
+        // pista había desaparecido, la descarga quedaba invisible e imposible
+        // de borrar desde Ajustes.
+        try {
+          if (Sonora.DB && Sonora.DB.downloads && typeof Sonora.DB.downloads.getRecords === 'function') {
+            return await Sonora.DB.downloads.getRecords();
+          }
+        } catch (e) {}
+        try {
+          if (Sonora.Download && typeof Sonora.Download.getDownloadedTracks === 'function') {
+            const tracks = await Sonora.Download.getDownloadedTracks();
+            return (tracks || []).map(t => ({ trackId: t.id, size: t.fileSize || 0, track: t }));
+          }
+        } catch (e) {}
+        return [];
+      };
+
       const renderDownloadsUI = async () => {
         let bytesUsed = 0;
-        let downloadedTracks = [];
+        let items = [];
 
         try {
-          if (Sonora.Download && typeof Sonora.Download.getStorageUsed === 'function') {
+          const records = await readDownloadRecords();
+          items = await Promise.all((records || []).map(async (rec) => {
+            let track = rec.track || null;
+            if (!track && Sonora.DB && Sonora.DB.tracks && typeof Sonora.DB.tracks.getById === 'function') {
+              try { track = await Sonora.DB.tracks.getById(rec.trackId); } catch (e) {}
+            }
+            bytesUsed += Number(rec.size) || Number(track && track.fileSize) || 0;
+            return { rec, track };
+          }));
+          if (!bytesUsed && Sonora.Download && typeof Sonora.Download.getStorageUsed === 'function') {
             bytesUsed = (await Sonora.Download.getStorageUsed()) || 0;
-          }
-          if (Sonora.Download && typeof Sonora.Download.getDownloadedTracks === 'function') {
-            downloadedTracks = (await Sonora.Download.getDownloadedTracks()) || [];
-          } else if (Sonora.DB && Sonora.DB.downloads && typeof Sonora.DB.downloads.getAll === 'function') {
-            downloadedTracks = (await Sonora.DB.downloads.getAll()) || [];
           }
         } catch (e) {
           console.warn('[Settings] Error reading downloads', e);
@@ -1922,74 +1969,93 @@
         const pct = Math.min(100, Math.max(3, Math.round((bytesUsed / (2 * 1024 * 1024 * 1024)) * 100)));
         if (storageBar) storageBar.style.width = pct + '%';
 
-        if (listEl) {
-          if (downloadedTracks.length === 0) {
-            listEl.innerHTML = `
-              <div style="font-size:12px;color:var(--color-text-secondary);padding:6px 0;">
-                No hay pistas descargadas para uso offline.
-              </div>
-            `;
-          } else {
-            listEl.innerHTML = downloadedTracks.map(t => {
-              const artwork = t.artworkUrl || generateArtwork(t.id, t.title);
-              const sizeStr = t.fileSize ? formatBytes(t.fileSize) : '3.5 MB';
-              return `
-                <div class="download-track-item">
-                  <img src="${artwork}" class="download-track-img" alt="" />
-                  <div class="download-track-info">
-                    <div class="download-track-name">${escapeHtml(t.title || 'Pista')}</div>
-                    <div class="download-track-artist">${escapeHtml(t.artist || 'Artista')} • ${sizeStr}</div>
-                  </div>
-                  <button class="btn-delete-download" data-track-id="${escapeHtml(t.id)}" title="Eliminar descarga">
-                    🗑️
-                  </button>
-                </div>
-              `;
-            }).join('');
+        if (!listEl) return;
 
-            // Bind single track delete
-            $$('.btn-delete-download', listEl).forEach(btn => {
-              addTrackedListener(btn, 'click', async () => {
-                const id = btn.getAttribute('data-track-id');
-                try {
-                  if (Sonora.Download && typeof Sonora.Download.deleteDownload === 'function') {
-                    await Sonora.Download.deleteDownload(id);
-                  } else if (Sonora.DB && Sonora.DB.downloads && typeof Sonora.DB.downloads.delete === 'function') {
-                    await Sonora.DB.downloads.delete(id);
-                  }
-                  showToast('Descarga eliminada');
-                  await renderDownloadsUI();
-                } catch (err) {
-                  console.error('[Settings] Delete download error', err);
-                }
-              });
-            });
-          }
+        if (items.length === 0) {
+          listEl.innerHTML = `
+            <div style="font-size:12px;color:var(--color-text-secondary);padding:6px 0;">
+              No hay pistas descargadas para uso offline.
+            </div>
+          `;
+          return;
         }
+
+        listEl.innerHTML = items.map(({ rec, track }) => {
+          const id = rec.trackId != null ? rec.trackId : String(rec.id || '').replace(/^dl_/, '');
+          const title = (track && track.title) || 'Descarga';
+          const artist = (track && track.artist) || 'Pista no encontrada';
+          const artwork = (track && track.artworkUrl) || generateArtwork(id, title);
+          const sizeStr = rec.size ? formatBytes(rec.size) : ((track && track.fileSize) ? formatBytes(track.fileSize) : '—');
+          return `
+            <div class="download-track-item">
+              <img src="${artwork}" class="download-track-img" alt="" />
+              <div class="download-track-info">
+                <div class="download-track-name">${escapeHtml(title)}</div>
+                <div class="download-track-artist">${escapeHtml(artist)} • ${sizeStr}</div>
+              </div>
+              <button class="btn-delete-download" data-track-id="${escapeHtml(id)}" data-record-id="${escapeHtml(rec.id || '')}" title="Eliminar descarga">
+                🗑️
+              </button>
+            </div>
+          `;
+        }).join('');
+
+        // Bind single download delete
+        $$('.btn-delete-download', listEl).forEach(btn => {
+          addTrackedListener(btn, 'click', async () => {
+            const trackId = btn.getAttribute('data-track-id');
+            const recordId = btn.getAttribute('data-record-id');
+            btn.disabled = true;
+            try {
+              if (Sonora.Download && typeof Sonora.Download.deleteDownload === 'function') {
+                await Sonora.Download.deleteDownload(trackId);
+              }
+              // Borrado directo por id de registro: cubre descargas cuyo track
+              // ya no existe o cuyo id no es numérico.
+              if (Sonora.DB && Sonora.DB.downloads && typeof Sonora.DB.downloads.delete === 'function') {
+                await Sonora.DB.downloads.delete(recordId || trackId);
+              }
+              if (Sonora.Store) {
+                try { Sonora.Store.emit('downloadsChanged', { deleted: trackId }); } catch (e) {}
+              }
+              showToast('Descarga eliminada');
+              await renderDownloadsUI();
+            } catch (err) {
+              console.error('[Settings] Delete download error', err);
+              btn.disabled = false;
+              showToast('No se pudo eliminar la descarga');
+            }
+          });
+        });
       };
 
       await renderDownloadsUI();
 
       if (btnClearAll) {
         addTrackedListener(btnClearAll, 'click', async () => {
-          const confirmed = window.confirm('¿Deseas eliminar todas las canciones descargadas de tu dispositivo?');
+          const confirmed = window.confirm('¿Deseas eliminar todas las canciones y videos descargados de tu dispositivo?');
           if (!confirmed) return;
 
+          btnClearAll.disabled = true;
           try {
-            if (Sonora.Download && typeof Sonora.Download.getDownloadedTracks === 'function') {
-              const all = await Sonora.Download.getDownloadedTracks();
-              for (const t of all) {
-                if (typeof Sonora.Download.deleteDownload === 'function') {
-                  await Sonora.Download.deleteDownload(t.id);
-                }
-              }
+            if (Sonora.DB && Sonora.DB.downloads && typeof Sonora.DB.downloads.clearAll === 'function') {
+              await Sonora.DB.downloads.clearAll();
             } else if (Sonora.DB && Sonora.DB.downloads && typeof Sonora.DB.downloads.clear === 'function') {
               await Sonora.DB.downloads.clear();
+            }
+            if (Sonora.DB && Sonora.DB.videos && typeof Sonora.DB.videos.clearAll === 'function') {
+              await Sonora.DB.videos.clearAll();
+            }
+            if (Sonora.Store) {
+              try { Sonora.Store.emit('downloadsChanged', { cleared: true }); } catch (e) {}
             }
             showToast('Todas las descargas han sido eliminadas');
             await renderDownloadsUI();
           } catch (err) {
             console.error('[Settings] Clear downloads failed', err);
+            showToast('No se pudieron borrar todas las descargas');
+          } finally {
+            btnClearAll.disabled = false;
           }
         });
       }
@@ -2027,34 +2093,17 @@
      * SECTION 6: Notifications Logic
      */
     async initNotificationsSection() {
-      const toggleNew = $('#notify-new-tracks');
-      const toggleRecs = $('#notify-recommendations');
       const toggleUpdates = $('#notify-updates');
+      if (!toggleUpdates) return;
 
-      const isNewOn = await getSetting('notify_new_tracks', true);
-      const isRecsOn = await getSetting('notify_recommendations', true);
       const isUpdatesOn = await getSetting('notify_updates', true);
-
-      if (toggleNew) {
-        toggleNew.checked = isNewOn;
-        addTrackedListener(toggleNew, 'change', async () => {
-          await setSetting('notify_new_tracks', toggleNew.checked);
-        });
-      }
-
-      if (toggleRecs) {
-        toggleRecs.checked = isRecsOn;
-        addTrackedListener(toggleRecs, 'change', async () => {
-          await setSetting('notify_recommendations', toggleRecs.checked);
-        });
-      }
-
-      if (toggleUpdates) {
-        toggleUpdates.checked = isUpdatesOn;
-        addTrackedListener(toggleUpdates, 'change', async () => {
-          await setSetting('notify_updates', toggleUpdates.checked);
-        });
-      }
+      toggleUpdates.checked = isUpdatesOn !== false;
+      addTrackedListener(toggleUpdates, 'change', async () => {
+        await setSetting('notify_updates', toggleUpdates.checked);
+        showToast(toggleUpdates.checked
+          ? 'Avisos de actualizaciones activados'
+          : 'Avisos de actualizaciones desactivados');
+      });
     },
 
     /**
@@ -2063,6 +2112,8 @@
     async initPrivacySection() {
       const btnClearHistory = $('#btn-clear-history');
       const btnClearSearch = $('#btn-clear-search-history');
+      const btnClearLyrics = $('#btn-clear-lyrics-cache');
+      const btnClearCache = $('#btn-clear-app-cache');
       const btnResetAll = $('#btn-reset-all-data');
 
       if (btnClearHistory) {
@@ -2091,29 +2142,120 @@
         });
       }
 
+      if (btnClearLyrics) {
+        addTrackedListener(btnClearLyrics, 'click', async () => {
+          const ok = window.confirm('¿Borrar las letras guardadas? Se volverán a buscar cuando reproduzcas cada canción. Tus letras editadas se conservan.');
+          if (!ok) return;
+          btnClearLyrics.disabled = true;
+          try {
+            if (Sonora.Lyrics && typeof Sonora.Lyrics.clearCache === 'function') {
+              await Sonora.Lyrics.clearCache();
+            } else if (Sonora.DB && Sonora.DB.lyrics && typeof Sonora.DB.lyrics.clear === 'function') {
+              await Sonora.DB.lyrics.clear();
+            }
+            showToast('Letras guardadas borradas');
+          } catch (e) {
+            console.error('[Settings] Error clearing lyrics cache', e);
+            showToast('No se pudieron borrar las letras');
+          } finally {
+            btnClearLyrics.disabled = false;
+          }
+        });
+      }
+
+      if (btnClearCache) {
+        addTrackedListener(btnClearCache, 'click', async () => {
+          const ok = window.confirm('¿Limpiar la caché de la aplicación? No se borrarán tus canciones, playlists ni descargas.');
+          if (!ok) return;
+          btnClearCache.disabled = true;
+          try {
+            if (window.caches && typeof caches.keys === 'function') {
+              const keys = await caches.keys();
+              await Promise.all(keys.map(k => caches.delete(k)));
+            }
+            showToast('Caché de la aplicación limpiada');
+          } catch (e) {
+            console.error('[Settings] Error clearing app cache', e);
+            showToast('No se pudo limpiar la caché');
+          } finally {
+            btnClearCache.disabled = false;
+          }
+        });
+      }
+
       if (btnResetAll) {
         addTrackedListener(btnResetAll, 'click', async () => {
           const step1 = window.confirm('⚠️ ADVERTENCIA: ¿Estás seguro de que deseas restablecer TODOS los datos de Sonora Music?\nSe borrarán tus playlists, historial, descargas y configuraciones.');
           if (!step1) return;
 
-          const step2 = window.confirm('⚠️ Confirmación final: ¿Realmente deseas restablecer la aplicación a su estado de fábrica?');
+          const step2 = window.confirm('⚠️ Confirmación final: ¿Realmente deseas restablecer la aplicación a su estado de fábrica?\n\nEsta acción no se puede deshacer.');
           if (!step2) return;
 
+          btnResetAll.disabled = true;
+          btnResetAll.textContent = 'Borrando…';
+
           try {
-            localStorage.clear();
-            if (window.indexedDB && indexedDB.databases) {
-              const dbs = await indexedDB.databases();
-              for (const db of dbs) {
-                if (db.name && db.name.toLowerCase().includes('sonora')) {
-                  indexedDB.deleteDatabase(db.name);
-                }
-              }
+            // 1) Detener reproducción y liberar blobs/descargas en memoria.
+            try { if (Sonora.Player && typeof Sonora.Player.stop === 'function') Sonora.Player.stop(); } catch (e) {}
+
+            // 2) Cerrar la base y esperar a que IndexedDB la borre de verdad.
+            //    Antes se llamaba deleteDatabase con la conexión abierta, así
+            //    que el borrado quedaba bloqueado y parecía que el botón no hacía nada.
+            if (Sonora.DB && typeof Sonora.DB.reset === 'function') {
+              await Sonora.DB.reset();
+            } else {
+              await new Promise((resolve) => {
+                const req = indexedDB.deleteDatabase('SonoraMusic');
+                req.onsuccess = resolve;
+                req.onerror = resolve;
+                req.onblocked = resolve;
+              });
             }
+
+            // 3) Otras bases de Sonora que hayan podido quedar de versiones anteriores.
+            if (window.indexedDB && typeof indexedDB.databases === 'function') {
+              try {
+                const dbs = await indexedDB.databases();
+                for (const db of dbs) {
+                  if (db.name && db.name.toLowerCase().includes('sonora') && db.name !== 'SonoraMusic') {
+                    await new Promise((resolve) => {
+                      const req = indexedDB.deleteDatabase(db.name);
+                      req.onsuccess = resolve;
+                      req.onerror = resolve;
+                      req.onblocked = resolve;
+                    });
+                  }
+                }
+              } catch (e) {}
+            }
+
+            // 4) Preferencias y sesión.
+            try { localStorage.clear(); } catch (e) {}
+            try { sessionStorage.clear(); } catch (e) {}
+
+            // 5) Caché del service worker (la app se quedaba con assets viejos).
+            if (window.caches && typeof caches.keys === 'function') {
+              try {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(k => caches.delete(k)));
+              } catch (e) {}
+            }
+            if (navigator.serviceWorker && typeof navigator.serviceWorker.getRegistrations === 'function') {
+              try {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(regs.map(r => r.unregister()));
+              } catch (e) {}
+            }
+
             alert('Sonora Music ha sido restablecida. La aplicación se recargará ahora.');
-            window.location.reload();
+            setTimeout(() => {
+              try { window.location.reload(); } catch (e) { window.location.href = window.location.pathname; }
+            }, 250);
           } catch (err) {
             console.error('[Settings] Reset failed', err);
-            alert('Se produjo un error al restablecer algunos datos.');
+            btnResetAll.disabled = false;
+            btnResetAll.textContent = '⚠️ Borrar todos los datos';
+            alert('Se produjo un error al restablecer algunos datos. Cierra y vuelve a abrir la app e inténtalo de nuevo.');
           }
         });
       }
@@ -2157,18 +2299,30 @@
 
       const linkWeb = $('#link-about-web');
       const linkFb = $('#link-about-feedback');
+      const btnCheckUpdates = $('#btn-check-updates');
 
-      if (linkWeb) {
-        addTrackedListener(linkWeb, 'click', (e) => {
-          e.preventDefault();
-          showToast('Sonora Music v4.0 Web Client');
+      if (btnCheckUpdates) {
+        addTrackedListener(btnCheckUpdates, 'click', async () => {
+          btnCheckUpdates.disabled = true;
+          btnCheckUpdates.textContent = '⏳ Comprobando...';
+          try {
+            if (Sonora.Updater && Sonora.Updater.check) {
+              await Sonora.Updater.check(true);
+            }
+          } finally {
+            btnCheckUpdates.disabled = false;
+            btnCheckUpdates.textContent = '🔄 Buscar actualizaciones';
+          }
         });
       }
-      if (linkFb) {
-        addTrackedListener(linkFb, 'click', (e) => {
-          e.preventDefault();
-          showToast('¡Gracias por tus sugerencias! Contacta al equipo.');
-        });
+
+      // Los enlaces de "Acerca de" apuntan a URLs reales (GitHub, web y
+      // sugerencias). Antes eran botones que solo mostraban un toast falso.
+      if (linkWeb && !linkWeb.getAttribute('href')) {
+        linkWeb.setAttribute('href', 'https://sonora-music-b1ee.onrender.com');
+      }
+      if (linkFb && !linkFb.getAttribute('href')) {
+        linkFb.setAttribute('href', 'https://github.com/raykozabala/sonora-music-server/issues');
       }
     },
 

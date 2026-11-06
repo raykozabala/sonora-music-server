@@ -782,6 +782,25 @@ body.light .lyrics-line.active {
   text-shadow: none;
 }
 
+/* Sincronización por palabra (LRC enriquecido con <mm:ss.xx>). */
+.lyr-word {
+  transition: color 0.12s linear, text-shadow 0.12s linear;
+}
+.lyrics-line.active .lyr-word {
+  color: rgba(255, 255, 255, 0.42);
+}
+.lyrics-line.active .lyr-word.sung {
+  color: #ffffff;
+  text-shadow: 0 0 22px rgba(var(--artwork-rgb, 255, 71, 87), 0.65);
+}
+body.light .lyrics-line.active .lyr-word {
+  color: rgba(0, 0, 0, 0.35);
+}
+body.light .lyrics-line.active .lyr-word.sung {
+  color: var(--color-primary);
+  text-shadow: none;
+}
+
 /* ── Letra sincronizada: contenedor, resaltado y botón "Sincronizar" ── */
 .lyrics-container {
   display: flex;

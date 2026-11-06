@@ -878,7 +878,9 @@
             try {
               const trackData = JSON.parse(extRecCard.getAttribute('data-external-rec'));
               if (trackData && Sonora.Player && typeof Sonora.Player.play === 'function') {
-                const serverBase = (Sonora.API && typeof Sonora.API.getActiveUrl === 'function') ? Sonora.API.getActiveUrl() : 'http://192.168.1.132:3000';
+                const serverBase = (Sonora.API && typeof Sonora.API.getMediaBase === 'function')
+                  ? Sonora.API.getMediaBase()
+                  : ((Sonora.API && typeof Sonora.API.getActiveUrl === 'function') ? Sonora.API.getActiveUrl() : '');
                 const trackObj = {
                   id: trackData.id || ('ext_' + Date.now()),
                   title: trackData.title,
@@ -887,7 +889,9 @@
                   duration: trackData.duration || 215,
                   artworkUrl: trackData.thumbnail,
                   sourceUrl: trackData.url,
-                  streamUrl: `${serverBase}/api/stream/external?url=${encodeURIComponent(trackData.url)}`,
+                  streamUrl: (Sonora.API && typeof Sonora.API.externalStreamUrl === 'function')
+                    ? Sonora.API.externalStreamUrl(trackData.url)
+                    : `${serverBase}/api/stream/external?url=${encodeURIComponent(trackData.url)}`,
                   platform: 'youtube'
                 };
                 Sonora.Player.play(trackObj);
@@ -907,7 +911,9 @@
             const cache = window._sonora_home_data || {};
             const recs = cache.artistRecommendations || [];
             if (recs.length > 0 && Sonora.Player) {
-              const serverBase = (Sonora.API && typeof Sonora.API.getActiveUrl === 'function') ? Sonora.API.getActiveUrl() : 'http://192.168.1.132:3000';
+              const serverBase = (Sonora.API && typeof Sonora.API.getMediaBase === 'function')
+                ? Sonora.API.getMediaBase()
+                : ((Sonora.API && typeof Sonora.API.getActiveUrl === 'function') ? Sonora.API.getActiveUrl() : '');
               const queue = recs.map((r, i) => ({
                 id: r.id || ('ext_' + Date.now() + '_' + i),
                 title: r.title,
@@ -916,7 +922,9 @@
                 duration: r.duration || 215,
                 artworkUrl: r.thumbnail,
                 sourceUrl: r.url,
-                streamUrl: `${serverBase}/api/stream/external?url=${encodeURIComponent(r.url)}`,
+                streamUrl: (Sonora.API && typeof Sonora.API.externalStreamUrl === 'function')
+                  ? Sonora.API.externalStreamUrl(r.url)
+                  : `${serverBase}/api/stream/external?url=${encodeURIComponent(r.url)}`,
                 platform: 'youtube'
               }));
               Sonora.Player.setQueue(queue, 0);

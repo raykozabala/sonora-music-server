@@ -42,6 +42,19 @@
     return '';
   }
 
+  /**
+   * Servidor para playlists colaborativas.
+   * Las playlists colaborativas necesitan un servidor compartido, así que en
+   * Modo Dispositivo (APK, web local) usamos la nube de Sonora como respaldo.
+   * Antes esto devolvía '' y por eso "unirse por código" nunca funcionaba en
+   * el teléfono.
+   */
+  function getCollabBase() {
+    var base = getBaseUrl();
+    if (base) return base;
+    return _renderUrl;
+  }
+
   function getTimeoutForMode(mode) {
     if (mode === 'local') return 5000;
     if (mode === 'northflank') return 10000;
@@ -190,10 +203,64 @@
     },
 
     /**
+     * URL de la nube de Sonora (Render).
+     * Se usa como respaldo para búsquedas, carátulas, videos y letras cuando
+     * el usuario está en Modo Dispositivo (APK/Mac) y no hay servidor local.
+     */
+    getRenderBase: function () {
+      return String(_renderUrl || '').trim().replace(/\/+$/, '');
+    },
+
+    /**
+     * Servidor de medios con respaldo real.
+     * getActiveUrl() devuelve '' en Modo Dispositivo; si usáramos eso, las
+     * URLs quedaban relativas ("/api/...") y fallaban en file:// (Android) y
+     * tauri:// (macOS). Aquí siempre preferimos un servidor absoluto.
+     */
+    getMediaBase: function () {
+      var base = getBaseUrl();
+      if (base) return String(base).trim().replace(/\/+$/, '');
+      var render = Sonora.API.getRenderBase();
+      if (render) return render;
+      try {
+        if (window.location && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
+          return String(window.location.origin).replace(/\/+$/, '');
+        }
+      } catch (e) {}
+      return '';
+    },
+
+    /**
+     * Construye una URL absoluta de streaming externo.
+     * Añade la calidad de audio configurada (96/160/320 kbps).
+     */
+    externalStreamUrl: function (targetUrl, quality) {
+      var base = Sonora.API.getMediaBase();
+      if (!base || !targetUrl) return '';
+      var q = quality;
+      if (!q) {
+        try { q = JSON.parse(localStorage.getItem('sonora_audio_quality')); } catch (e) {}
+      }
+      var bitrate = q === 'low' ? '96k' : (q === 'high' ? '320k' : '160k');
+      return base + '/api/stream/external?url=' + encodeURIComponent(targetUrl) +
+        '&quality=' + encodeURIComponent(bitrate);
+    },
+
+    /**
+     * URL del servidor compartido para playlists colaborativas.
+     * Siempre devuelve algo (usa la nube de Sonora en Modo Dispositivo).
+     */
+    getCollabBase: function () {
+      return getCollabBase();
+    },
+
+    /**
      * Get related music recommendations for continuous autoplay
      */
     getRecommendations: function (artist, title, genre, excludeTitles) {
-      var base = this.getActiveUrl();
+      // En Modo Dispositivo no hay servidor activo: usamos la nube de Sonora
+      // para que Inicio/Discover sigan teniendo recomendaciones reales.
+      var base = this.getMediaBase();
       if (!base) return Promise.resolve([]);
       var url = base + '/api/recommendations'
         + '?artist=' + encodeURIComponent(artist || '')
@@ -219,9 +286,7 @@
               duration: x.duration || 0,
               artworkUrl: x.artworkUrl || x.thumbnail || x.image || '',
               sourceUrl: url2,
-              streamUrl: url2
-                ? (base.replace(/\/+$/, '') + '/api/stream/external?url=' + encodeURIComponent(url2))
-                : (x.streamUrl || ''),
+              streamUrl: url2 ? Sonora.API.externalStreamUrl(url2) : (x.streamUrl || ''),
               platform: x.platform || 'youtube',
               isRecommendation: 1
             };
@@ -234,7 +299,7 @@
      * Collaborative Playlists API
      */
     getCollaborativePlaylist: function (code) {
-      var base = this.getActiveUrl();
+      var base = getCollabBase();
       if (!base) return Promise.reject(new Error('No server configured'));
       return fetchWithTimeout(base + '/api/playlists/collaborative/' + encodeURIComponent(code), {}, 8000)
         .then(function (res) {
@@ -244,7 +309,7 @@
     },
 
     addTrackToCollaborative: function (code, track, playlistName) {
-      var base = this.getActiveUrl();
+      var base = getCollabBase();
       if (!base) return Promise.reject(new Error('No server configured'));
       return fetchWithTimeout(base + '/api/playlists/collaborative/' + encodeURIComponent(code) + '/tracks', {
         method: 'POST',
@@ -257,7 +322,7 @@
     },
 
     saveCollaborativePlaylist: function (code, data) {
-      var base = this.getActiveUrl();
+      var base = getCollabBase();
       if (!base) return Promise.reject(new Error('No server configured'));
       return fetchWithTimeout(base + '/api/playlists/collaborative/' + encodeURIComponent(code), {
         method: 'POST',
@@ -270,23 +335,26 @@
     },
 
     deleteCollaborativePlaylist: function (code) {
-      var base = this.getActiveUrl();
+      var base = getCollabBase();
       if (!base) return Promise.reject(new Error('No server configured'));
       return fetchWithTimeout(base + '/api/playlists/collaborative/' + encodeURIComponent(code), {
         method: 'DELETE'
       }, 8000).then(function (res) {
-        if (!res.ok) throw new Error('Error al eliminar');
+        // 404 = ya no existe en el servidor: el resultado deseado se cumplió.
+        if (res.status === 404) return { deleted: true, alreadyGone: true };
+        if (!res.ok) throw new Error('Error al eliminar (HTTP ' + res.status + ')');
         return res.json();
       });
     },
 
     removeTrackFromCollaborative: function (code, trackId) {
-      var base = this.getActiveUrl();
+      var base = getCollabBase();
       if (!base) return Promise.reject(new Error('No server configured'));
       return fetchWithTimeout(base + '/api/playlists/collaborative/' + encodeURIComponent(code) + '/tracks/' + encodeURIComponent(trackId), {
         method: 'DELETE'
       }, 8000).then(function (res) {
-        if (!res.ok) throw new Error('Error al quitar la canción');
+        if (res.status === 404) return { removed: true, alreadyGone: true };
+        if (!res.ok) throw new Error('Error al quitar la canción (HTTP ' + res.status + ')');
         return res.json();
       });
     },
