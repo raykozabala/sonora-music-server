@@ -660,6 +660,162 @@ function findBinary(name) {
 const YTDLP_BIN = findBinary('yt-dlp');
 const FFMPEG_BIN = findBinary('ffmpeg');
 
+// Deno es el runtime de JavaScript que yt-dlp usa para resolver los desafíos
+// de YouTube (nsig / PO token). Sin él, en servidores como Render la
+// extracción falla con "Requested format is not available".
+const DENO_BIN = findBinary('deno');
+
+/** Ejecuta un comando corto y devuelve la salida, o '' si falla. */
+function safeExec(cmd, timeoutMs) {
+  try {
+    return execSync(cmd, { encoding: 'utf8', timeout: timeoutMs || 8000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Cookies de YouTube.
+ * Cuando la IP del servidor está marcada por YouTube ("Sign in to confirm
+ * you're not a bot", habitual en Render) hacen falta cookies de una sesión.
+ * Se pueden subir como Secret File o pasar en base64 por variable de entorno.
+ */
+const COOKIES_CANDIDATES = [
+  process.env.YTDLP_COOKIES_FILE,
+  '/etc/secrets/youtube-cookies.txt',
+  '/etc/secrets/cookies.txt',
+  '/tmp/sonora-cookies.txt',
+  path.join(__dirname, 'cookies.txt'),
+  path.join(process.cwd(), 'cookies.txt')
+].filter(Boolean);
+
+if (process.env.YTDLP_COOKIES_B64) {
+  try {
+    const decoded = Buffer.from(String(process.env.YTDLP_COOKIES_B64).trim(), 'base64');
+    if (decoded.length > 50) {
+      fs.writeFileSync('/tmp/sonora-cookies.txt', decoded);
+      const looksValid = decoded.toString('utf8').indexOf('youtube.com') !== -1;
+      console.log('[Cookies] base64 -> ' + decoded.length + ' bytes, válido=' + looksValid);
+      if (!looksValid) {
+        console.error('[Cookies] ⚠️ YTDLP_COOKIES_B64 no parece un cookies.txt válido');
+      }
+    } else {
+      console.error('[Cookies] ⚠️ YTDLP_COOKIES_B64 demasiado corto: ' + decoded.length + ' bytes');
+    }
+  } catch (e) {
+    console.warn('[Cookies] YTDLP_COOKIES_B64 no se pudo decodificar:', e.message);
+  }
+}
+
+// yt-dlp reescribe el archivo de cookies, así que trabajamos sobre una copia
+// escribible: los Secret Files de Render son de solo lectura.
+const WRITABLE_COOKIES = '/tmp/sonora-cookies-rw.txt';
+let COOKIES_PATH = null;
+
+(function prepareCookies() {
+  try {
+    let src = null;
+    for (const candidate of COOKIES_CANDIDATES) {
+      try {
+        if (fs.existsSync(candidate) && fs.statSync(candidate).size > 50) { src = candidate; break; }
+      } catch (e) {}
+    }
+    if (!src) {
+      console.warn('[Cookies] sin cookies: YouTube puede bloquear las descargas desde este servidor');
+      return;
+    }
+    if (path.resolve(src) !== path.resolve(WRITABLE_COOKIES)) {
+      fs.copyFileSync(src, WRITABLE_COOKIES);
+      try { fs.chmodSync(WRITABLE_COOKIES, 0o600); } catch (e) {}
+    }
+    COOKIES_PATH = WRITABLE_COOKIES;
+    console.log('[Cookies] listas | origen=' + src + ' | copia=' + WRITABLE_COOKIES);
+  } catch (e) {
+    console.warn('[Cookies] error preparando las cookies:', e.message);
+    COOKIES_PATH = null;
+  }
+})();
+
+/** Añade las cookies a los argumentos de yt-dlp si están disponibles. */
+function withCookies(args) {
+  return COOKIES_PATH ? ['--cookies', COOKIES_PATH].concat(args) : args.slice();
+}
+
+/** Clientes de YouTube a probar, del más compatible al más específico. */
+const YT_CLIENT_FALLBACKS = [null, 'tv_embedded', 'android_vr'];
+const YT_FALLBACK_ERROR = /sign in to confirm|not a bot|requested format|no video formats|unable to extract|player response|403|410/i;
+
+(function logJsRuntimeStatus() {
+  const deno = safeExec('"' + DENO_BIN + '" --version');
+  if (deno) console.log('[JS] deno disponible: ' + deno.split('\n')[0]);
+  else console.warn('[JS] SIN deno: yt-dlp no podrá resolver los desafíos de YouTube');
+})();
+
+/**
+ * GET /api/system
+ * Diagnóstico de binarios y cookies (sin exponer el contenido de las cookies).
+ */
+app.get('/api/system', (req, res) => {
+  const ytdlpVersion = safeExec('"' + YTDLP_BIN + '" --version');
+  const ffmpegRaw = safeExec('"' + FFMPEG_BIN + '" -version');
+  const denoRaw = safeExec('"' + DENO_BIN + '" --version');
+  let cookies = { available: false, path: null };
+  if (COOKIES_PATH) {
+    try {
+      const buf = fs.readFileSync(COOKIES_PATH);
+      const sha = require('crypto').createHash('sha256').update(buf).digest('hex');
+      cookies = {
+        available: true,
+        path: COOKIES_PATH,
+        size: buf.length,
+        sha256: sha,
+        valid: buf.toString('utf8').indexOf('youtube.com') !== -1
+      };
+    } catch (e) {
+      cookies = { available: false, path: COOKIES_PATH, error: e.message };
+    }
+  }
+  res.json({
+    status: 'ok',
+    mode: SERVER_MODE,
+    node: process.version,
+    platform: process.platform,
+    version: '7.17.0',
+    ytdlp: { path: YTDLP_BIN, available: !!ytdlpVersion, version: ytdlpVersion || null },
+    ffmpeg: { path: FFMPEG_BIN, available: !!ffmpegRaw, version: ffmpegRaw ? ffmpegRaw.split('\n')[0] : null },
+    deno: { path: DENO_BIN, available: !!denoRaw, version: denoRaw ? denoRaw.split('\n')[0] : null },
+    cookies: cookies
+  });
+});
+
+/**
+ * GET /api/ytdiag?id=VIDEO_ID
+ * Prueba varios "player clients" de YouTube y devuelve cuáles funcionan.
+ * Sirve para diagnosticar bloqueos desde Render.
+ */
+app.get('/api/ytdiag', async (req, res) => {
+  const id = String(req.query.id || 'kXYiU_JCYtU').replace(/[^A-Za-z0-9_-]/g, '');
+  const videoUrl = 'https://www.youtube.com/watch?v=' + id;
+  const clients = ['default', 'android_vr', 'tv_embedded', 'mweb', 'web_safari'];
+  const results = {};
+  for (const client of clients) {
+    const args = ['--no-playlist', '--no-warnings', '--quiet', '-f', 'bestaudio[ext=m4a]/bestaudio/best', '--get-url'];
+    if (client !== 'default') args.push('--extractor-args', 'youtube:player_client=' + client);
+    args.push(videoUrl);
+    try {
+      const { stdout } = await runYtDlp(args, 45000);
+      const direct = stdout.trim().split(/\r?\n/)[0] || '';
+      results[client] = {
+        ok: !!direct,
+        host: (direct.match(/^https?:\/\/([^/]+)/) || [])[1] || null
+      };
+    } catch (e) {
+      results[client] = { ok: false, error: String(e.message).slice(0, 150) };
+    }
+  }
+  res.json({ id: id, mode: SERVER_MODE, clients: results });
+});
+
 /**
  * GET /api/search/external?q=
  * Live search across YouTube, YouTube Music and SoundCloud
@@ -1526,7 +1682,7 @@ app.get('/api/stream/external', async (req, res) => {
       targetUrl
     ];
 
-    const proc = spawn(YTDLP_BIN, ytdlpArgs);
+    const proc = spawn(YTDLP_BIN, withCookies(ytdlpArgs));
 
     // If ffmpeg is available, pipe through ffmpeg to guarantee valid MP3 frames
     if (FFMPEG_BIN && fs.existsSync(FFMPEG_BIN)) {
@@ -1588,7 +1744,7 @@ function runYtDlp(args, timeoutMs) {
     let finished = false;
     let proc;
     try {
-      proc = spawn(YTDLP_BIN, args);
+      proc = spawn(YTDLP_BIN, withCookies(args));
     } catch (e) {
       reject(e);
       return;
@@ -1622,6 +1778,27 @@ function runYtDlp(args, timeoutMs) {
       }
     });
   });
+}
+
+/**
+ * Ejecuta yt-dlp probando varios "player clients" de YouTube. En Render el
+ * cliente por defecto a veces exige PO token; tv_embedded/android_vr suelen
+ * pasar. El primer intento mantiene el comportamiento normal.
+ */
+async function runYtDlpWithFallback(baseArgs, timeoutMs) {
+  let lastErr = null;
+  for (const client of YT_CLIENT_FALLBACKS) {
+    const args = baseArgs.slice();
+    if (client) args.push('--extractor-args', 'youtube:player_client=' + client);
+    try {
+      return await runYtDlp(args, timeoutMs);
+    } catch (e) {
+      lastErr = e;
+      const msg = String((e && e.message) || '');
+      if (!YT_FALLBACK_ERROR.test(msg)) throw e;
+    }
+  }
+  throw lastErr || new Error('yt-dlp falló');
 }
 
 function videoFormatSpec(mode, quality) {
@@ -1748,10 +1925,10 @@ app.get('/api/video/stream', async (req, res) => {
       const cached = videoCacheGet(cacheKey);
       if (cached) return cached;
     }
-    const { stdout } = await runYtDlp([
+    const { stdout } = await runYtDlpWithFallback([
       '--no-playlist', '--no-warnings', '--no-progress',
       '-f', formatSpec, '-g', '--', String(targetUrl)
-    ], 25000);
+    ], 40000);
     const direct = stdout.trim().split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0];
     if (!direct) throw new Error('yt-dlp no devolvió una URL de medios');
     videoCacheSet(cacheKey, direct);
@@ -1788,9 +1965,9 @@ app.get('/api/video/info', async (req, res) => {
   const targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).json({ error: 'Falta el parámetro url' });
   try {
-    const { stdout } = await runYtDlp([
+    const { stdout } = await runYtDlpWithFallback([
       '--dump-single-json', '--no-playlist', '--no-warnings', '--no-progress', '--', String(targetUrl)
-    ], 30000);
+    ], 45000);
     const info = JSON.parse(stdout);
 
     const heights = [];
@@ -1848,14 +2025,14 @@ app.get('/api/video/subtitles', async (req, res) => {
   try {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sonora-subs-'));
     const outTemplate = path.join(tmpDir, 'sub');
-    await runYtDlp([
+    await runYtDlpWithFallback([
       '--no-playlist', '--no-warnings', '--no-progress', '--skip-download',
       '--write-subs', '--write-auto-subs',
       '--sub-langs', lang + ',es,en',
       '--sub-format', 'vtt/srt/best',
       '-o', outTemplate,
       '--', String(targetUrl)
-    ], 30000);
+    ], 45000);
 
     const files = fs.readdirSync(tmpDir).filter((f) => /\.(vtt|srt)$/i.test(f));
     if (!files.length) {
@@ -1918,7 +2095,7 @@ app.get('/api/download/external', (req, res) => {
     const q = ['320k', '192k', '128k'].includes(quality) ? quality : '320k';
     // Embed ID3 metadata (artist, title) and embedded cover thumbnail
     const args = ['-x', '--audio-format', 'mp3', '--audio-quality', q, '--add-metadata', '--embed-thumbnail', '-o', '-', targetUrl];
-    const proc = spawn(YTDLP_BIN, args);
+    const proc = spawn(YTDLP_BIN, withCookies(args));
 
     proc.stdout.pipe(res);
     proc.stderr.on('data', () => {});
@@ -1942,7 +2119,7 @@ app.get('/api/download/external', (req, res) => {
     }
 
     const args = ['-f', formatSpec, '--add-metadata', '-o', '-', targetUrl];
-    const proc = spawn(YTDLP_BIN, args);
+    const proc = spawn(YTDLP_BIN, withCookies(args));
 
     proc.stdout.pipe(res);
     proc.stderr.on('data', () => {});
@@ -2737,7 +2914,7 @@ app.post('/api/download/youtube', async (req, res) => {
       url
     ];
 
-    const proc = spawn(YTDLP_BIN, args);
+    const proc = spawn(YTDLP_BIN, withCookies(args));
 
     let stderrOutput = '';
     proc.stderr.on('data', (data) => {
@@ -2959,7 +3136,7 @@ app.get('/api/stream/:id', (req, res) => {
         '-o', '-',
         `ytsearch1:${query}`
       ];
-      const proc = spawn(YTDLP_BIN, ytdlpArgs);
+      const proc = spawn(YTDLP_BIN, withCookies(ytdlpArgs));
 
       if (FFMPEG_BIN && fs.existsSync(FFMPEG_BIN)) {
         const ffmpegArgs = ['-i', 'pipe:0', '-vn', '-f', 'mp3', '-acodec', 'libmp3lame', '-b:a', '192k', 'pipe:1'];
